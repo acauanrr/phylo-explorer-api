@@ -6,9 +6,6 @@
   <a href="#">
     <img src="https://dcc-site-one.vercel.app/images/logos/logo-dcc-01.png" alt="Logo" width="220" height="100">
   </a>
-
-  <h3 align="center">API CMS DCC-UFRR</h3>
-
 </div>
 
 
