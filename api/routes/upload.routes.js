@@ -1,7 +1,7 @@
 // https://sebhastian.com/javascript-csv-to-array/
 import { Router } from "express";
 import multer from "multer";
-import csvToArray from "../../utils/csvToArray.js";
+import Papa from "papaparse";
 
 const multerConfig = multer();
 const router = new Router();
@@ -17,14 +17,17 @@ const as = nlp.as;
 // Neighbor-joining
 import { RapidNeighborJoining } from "neighbor-joining";
 
+// --------------------------------------------------------------------------------------------- OLD
 // Upload files
 router.post("/files", multerConfig.single("file"), async (req, res) => {
-  const text = req.file.buffer.toString("utf-8");
-  let data = await csvToArray(text);
-  data.splice(-1);
+  const csv = req.file.buffer.toString("utf-8");
+  var { data } = Papa.parse(csv, {
+    header: true,
+  });
+  data.splice(-1); // remove ultima linha - devido a primeira ser o cabeçalho
   console.log(data);
 
-  // console.log(data.length);
+  console.log(data.length);
   // console.log(Object.keys(data[0]));
 
   // -----------------------------------------------------  1° - Criar matriz de distâncias
@@ -55,7 +58,6 @@ router.post("/files", multerConfig.single("file"), async (req, res) => {
   data.map((d) =>
     taxa.push({
       name: d.title,
-      group: d.publication,
     })
   );
   console.log(taxa);
@@ -73,6 +75,7 @@ router.post("/files", multerConfig.single("file"), async (req, res) => {
     locationData: "",
   });
 });
+// --------------------------------------------------------------------------------------------- END OLD
 
 // Read Files
 router.get("/files", (req, res) => {

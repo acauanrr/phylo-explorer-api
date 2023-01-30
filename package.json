@@ -24,6 +24,7 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "neighbor-joining": "^1.0.4",
+    "papaparse": "^5.3.2",
     "pug": "^3.0.2",
     "wink-distance": "^2.0.2",
     "wink-eng-lite-web-model": "^1.4.3",
