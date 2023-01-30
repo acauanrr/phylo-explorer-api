@@ -37,6 +37,7 @@ router.post("/files", multerConfig.single("file"), async (req, res) => {
   let line_simi = [];
   let docA, bowA, docB, bowB, simi;
 
+  // Isso aqui tem que melhorar -> O(n^2)
   for (let i = 0; i < data.length; i++) {
     docA = nlp.readDoc(data[i].content);
     bowA = docA.tokens().out(its.value, as.bow);
