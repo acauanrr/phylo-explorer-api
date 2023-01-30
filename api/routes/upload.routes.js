@@ -62,10 +62,16 @@ router.post("/files", multerConfig.single("file"), async (req, res) => {
 
   var RNJ = new RapidNeighborJoining(distance_matrix, taxa);
   RNJ.run();
-  var treeObject = RNJ.getAsObject();
-  var treeNewick = RNJ.getAsNewick();
+  //var phyloObjData = RNJ.getAsObject();
+  var phyloNewickData = RNJ.getAsNewick();
 
-  return res.json({ treeObject, treeNewick });
+  return res.json({
+    objData: "",
+    phyloNewickData,
+    wordcloudData: "",
+    timevisData: "",
+    locationData: "",
+  });
 });
 
 // Read Files
