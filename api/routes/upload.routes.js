@@ -17,7 +17,6 @@ const as = nlp.as;
 // Neighbor-joining
 import { RapidNeighborJoining } from "neighbor-joining";
 
-// --------------------------------------------------------------------------------------------- OLD
 // Upload files
 router.post("/files", multerConfig.single("file"), async (req, res) => {
   const csv = req.file.buffer.toString("utf-8");
@@ -26,16 +25,12 @@ router.post("/files", multerConfig.single("file"), async (req, res) => {
   });
   data.splice(-1); // remove ultima linha - devido a primeira ser o cabeçalho
   console.log(data);
-
   console.log(data.length);
-  // console.log(Object.keys(data[0]));
 
   // -----------------------------------------------------  1° - Criar matriz de distâncias
   // https://winkjs.org/wink-nlp/getting-started.html
 
   // ####   Similarity   ####
-  // Make Distance Matrix
-
   let distance_matrix = [];
   let line_simi = [];
   let docA, bowA, docB, bowB, simi;
@@ -68,14 +63,13 @@ router.post("/files", multerConfig.single("file"), async (req, res) => {
   var phyloNewickData = RNJ.getAsNewick();
 
   return res.json({
-    objData: "",
+    objData: data,
     phyloNewickData,
     wordcloudData: "",
     timevisData: "",
     locationData: "",
   });
 });
-// --------------------------------------------------------------------------------------------- END OLD
 
 // Read Files
 router.get("/files", (req, res) => {
