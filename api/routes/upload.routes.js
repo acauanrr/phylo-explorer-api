@@ -93,11 +93,22 @@ router.post("/files", multerConfig.single("file"), async (req, res) => {
   //var phyloObjData = RNJ.getAsObject();
   var phyloNewickData = RNJ.getAsNewick();
 
+  // -------- Make DataVis
+  const timevisData = [];
+  if (data[0].date) {
+    data.map((article) =>
+      timevisData.push({
+        Date: article.date,
+        AnswerCount: 1,
+      })
+    );
+  }
+
   return res.json({
     objData: data,
     phyloNewickData,
     wordcloudData,
-    timevisData: "",
+    timevisData,
     locationData: "",
   });
 });
