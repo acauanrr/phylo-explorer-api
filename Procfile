@@ -1,1 +1,1 @@
-web: cd node_service && npm start
+web: npm start
