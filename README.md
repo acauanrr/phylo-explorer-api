@@ -1,37 +1,149 @@
-<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
-<a name="readme-top"></a>
-<!-- PROJECT LOGO -->
-<br />
-<div align="center">
-  <a href="#">
-    <img src="https://dcc-site-one.vercel.app/images/logos/logo-dcc-01.png" alt="Logo" width="220" height="100">
-  </a>
-</div>
+# Phylo-Explorer API
 
+Backend API service for the Phylo-Explorer application, providing NLP processing and phylogenetic tree generation for text collections.
 
-<p align="right">(<a href="#readme-top">Voltar ao Topo</a>)</p>
+## Features
 
-<!-- CONTACT -->
-## Contato
+- CSV file upload and processing
+- Natural Language Processing with wink-nlp
+- Phylogenetic tree construction using neighbor-joining algorithm
+- Word cloud data generation
+- Timeline data extraction
+- RESTful API with Express.js
 
-Prof. Acauan Ribeiro
+## Quick Start
 
-E-mail: [email](mailto:acauan.ribeiro@ufrr.br)
+```bash
+# Install dependencies
+npm install
 
-Twitter: [@acauanrr](https://twitter.com/acauanrr)
+# Set up environment variables
+cp .env.example .env
 
-Linkedin: [@acauanribeiro](https://www.linkedin.com/in/acauanribeiro)
+# Run development server
+npm run dev
 
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[linkedin-url]: www.linkedin.com/in/acauanribeiro
-[product-screenshot]: frontend/public/images/screen-shot-dcc.png
-[Next.js]: https://img.shields.io/badge/next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white
-[Next-url]: https://nextjs.org/
-[React.js]: https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB
-[React-url]: https://reactjs.org/
-[Node.js]: https://img.shields.io/badge/node.js-026e00?style=for-the-badge&logo=nodedotjs&logoColor=white
-[Node-url]: https://nodejs.org/pt-br/
-[SQLite]: https://img.shields.io/badge/sqlite-044a64?style=for-the-badge&logo=sqlite&logoColor=white
-[SQLite-url]: https://www.sqlite.org/# phylo-explorer-api
-# phylo-explorer-api
+# Run production server
+npm start
+```
+
+## API Endpoints
+
+### POST /upload/files
+Upload and process a CSV file containing documents.
+
+**Request:**
+- Method: POST
+- Content-Type: multipart/form-data
+- Body: CSV file
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "phyloNewickData": "Newick format tree",
+    "wordcloudData": [{"word": "example", "qtd": 10}],
+    "timevisData": [{"Date": "2024-01-01", "AnswerCount": 1}],
+    "locationData": "",
+    "objData": [...]
+  }
+}
+```
+
+### GET /
+Health check endpoint.
+
+**Response:**
+```json
+{
+  "success": true,
+  "msg": "Sucesso! - API - Phylo-Explorer está on!"
+}
+```
+
+## CSV Format Requirements
+
+Required columns:
+- `title`: Document title
+- `content`: Document text content
+
+Optional columns:
+- `date`: Document date (for timeline visualization)
+
+## Environment Variables
+
+Create a `.env` file with:
+
+```
+PORT=6001
+NODE_ENV=development
+CORS_ORIGIN=http://localhost:3000
+MAX_FILE_SIZE=10485760
+```
+
+## Error Handling
+
+The API includes comprehensive error handling:
+- File validation (type, size)
+- CSV parsing errors
+- Missing required columns
+- Processing errors
+
+## Security Features
+
+- Helmet.js for security headers
+- CORS configuration
+- File size limits
+- Input validation
+
+## Development
+
+```bash
+# Run with nodemon for auto-reload
+npm run dev
+
+# Check code quality
+npm run lint
+
+# Fix linting issues
+npm run lint:fix
+```
+
+## Deployment
+
+### Heroku
+
+```bash
+heroku create phylo-explorer-api
+heroku config:set NODE_ENV=production
+git push heroku main
+```
+
+### Docker (Optional)
+
+```dockerfile
+FROM node:16-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+EXPOSE 6001
+CMD ["npm", "start"]
+```
+
+## Technologies
+
+- Express.js - Web framework
+- wink-nlp - NLP processing
+- neighbor-joining - Phylogenetic trees
+- PapaParse - CSV parsing
+- Multer - File uploads
+
+## License
+
+ISC License
+
+## Author
+
+Acauan Ribeiro

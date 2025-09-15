@@ -4,9 +4,11 @@
   "description": "phylo-explorer-api",
   "main": "index.js",
   "scripts": {
-    "start": "node .",
-    "dev": "nodemon api/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix"
   },
   "keywords": [],
   "author": "Acauan Ribeiro",
