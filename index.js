@@ -7,6 +7,7 @@ import helmet from "helmet";
 import cors from "cors";
 
 import uploadRoutes from "./api/routes/upload.routes.js";
+import phyloRoutes from "./src/routes/phyloRoutes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -42,6 +43,9 @@ app.use(
 // ---- ROTAS ----
 // Upload
 app.use("/upload", uploadRoutes);
+
+// Phylo ML Routes
+app.use("/api/phylo", phyloRoutes);
 
 // Index Endpoint
 app.get("/", (req, res) => {
