@@ -2,8 +2,9 @@
   "name": "phylo-explorer-api",
   "version": "1.0.0",
   "description": "Backend services for Phylo Explorer",
+  "type": "module",
   "scripts": {
-    "start": "node node_service/index.js"
+    "start": "node index.js"
   },
   "engines": {
     "node": "18.x",
