@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "description": "Backend services for Phylo Explorer",
   "scripts": {
-    "start": "node node_service/index.js",
-    "postinstall": "cd python_service && pip install -r requirements.txt"
+    "start": "node node_service/index.js"
   },
   "engines": {
     "node": "18.x",
     "npm": "9.x"
-  }
+  },
+  "dependencies": {}
 }
