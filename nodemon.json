@@ -1,0 +1,10 @@
+{
+  "watch": ["*.js", "api/**/*.js", "src/**/*.js", "middleware/**/*.js", "utils/**/*.js"],
+  "ext": "js,json",
+  "ignore": ["node_modules/**", "*.test.js"],
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "delay": 1000,
+  "verbose": true
+}

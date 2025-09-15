@@ -23,8 +23,28 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(morgan(NODE_ENV === "production" ? "combined" : "dev"));
 
 // CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://phylo-explorer-front-5c59fee5d5c4.herokuapp.com',
+  'https://phylo-explorer-front.herokuapp.com'
+];
+
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || true,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+
+    // Check if the origin is in the allowed list or if we're in development mode
+    if (allowedOrigins.indexOf(origin) !== -1 || NODE_ENV === 'development') {
+      callback(null, true);
+    } else if (process.env.CORS_ORIGIN === '*') {
+      // Allow all origins if explicitly set
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200
 };
