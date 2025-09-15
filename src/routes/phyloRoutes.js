@@ -36,25 +36,40 @@ router.post('/generate-tree', async (req, res) => {
 
 /**
  * POST /api/phylo/search
- * Search using ML service
+ * Search for node information
  */
 router.post('/search', async (req, res) => {
   try {
-    const { query } = req.body;
+    const { query, node_name, node_type } = req.body;
+    const searchQuery = query || node_name;
 
-    if (!query) {
+    if (!searchQuery) {
       return res.status(400).json({
         success: false,
-        error: 'Query is required'
+        error: 'Query or node_name is required'
       });
     }
 
-    // Call ML service
-    const result = await mlService.search(query);
+    // For now, return mock data that matches the expected format
+    // This will be replaced with actual search functionality later
+    const mockData = {
+      node_name: searchQuery,
+      node_type: node_type || 'general',
+      title: searchQuery.replace(/_/g, ' '),
+      description: `Information about ${searchQuery}`,
+      content: `This is detailed content for the node: ${searchQuery}`,
+      metadata: {
+        created_at: new Date().toISOString(),
+        category: node_type || 'general'
+      },
+      locations: [],
+      geo_data: []
+    };
 
     res.json({
       success: true,
-      ...result
+      data: mockData,
+      query: searchQuery
     });
   } catch (error) {
     console.error('Search error:', error);
