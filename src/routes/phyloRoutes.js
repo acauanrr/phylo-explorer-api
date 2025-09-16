@@ -5,14 +5,6 @@ import webSearchService from '../services/webSearchService.js';
 
 const router = express.Router();
 
-// Handle OPTIONS for all routes (CORS preflight)
-router.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
-});
 
 /**
  * POST /api/phylo/generate-tree
