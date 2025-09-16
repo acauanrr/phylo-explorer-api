@@ -27,25 +27,35 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'https://phylo-explorer-front-5c59fee5d5c4.herokuapp.com',
-  'https://phylo-explorer-front.herokuapp.com'
-];
+  'https://phylo-explorer-front.herokuapp.com',
+  process.env.CORS_ORIGIN
+].filter(Boolean); // Remove any undefined values
 
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or Postman)
     if (!origin) return callback(null, true);
 
-    // Check if the origin is in the allowed list or if we're in development mode
-    if (allowedOrigins.indexOf(origin) !== -1 || NODE_ENV === 'development') {
+    // In development, allow all origins
+    if (NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+
+    // Check if the origin is in the allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else if (process.env.CORS_ORIGIN === '*') {
       // Allow all origins if explicitly set
       callback(null, true);
     } else {
+      console.log('CORS rejected origin:', origin);
+      console.log('Allowed origins:', allowedOrigins);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
