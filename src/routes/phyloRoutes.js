@@ -2,7 +2,6 @@ import express from 'express';
 import axios from 'axios';
 import mlService from '../services/mlService.js';
 import webSearchService from '../services/webSearchService.js';
-import enhancedSearchService from '../services/enhancedSearchService.js';
 
 const router = express.Router();
 
@@ -87,10 +86,10 @@ router.post('/search', async (req, res) => {
       console.log('ML service search not available, using fallback web search:', mlError.message);
     }
 
-    // Fallback to enhanced local web search service if ML service didn't work
+    // Fallback to local web search service if ML service didn't work
     if (!searchResults) {
-      searchResults = await enhancedSearchService.search(searchQuery);
-      console.log('Using enhanced local search service');
+      searchResults = await webSearchService.search(searchQuery);
+      console.log('Using local web search service');
     }
 
     // Add node type if provided

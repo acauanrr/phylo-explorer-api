@@ -1,5 +1,4 @@
 import axios from 'axios';
-import * as cheerio from 'cheerio';
 
 class EnhancedSearchService {
   constructor() {
