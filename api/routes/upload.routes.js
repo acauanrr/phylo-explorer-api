@@ -1,21 +1,9 @@
 import { Router } from "express";
 import Papa from "papaparse";
 import { multerConfig, validateFileUpload } from "../../middleware/validation.js";
+import mlService from "../../src/services/mlService.js";
 
 const router = new Router();
-
-// NLP Setup
-import winkNLP from "wink-nlp";
-import model from "wink-eng-lite-web-model";
-import similarity from "wink-nlp/utilities/similarity.js";
-
-const nlp = winkNLP(model);
-const its = nlp.its;
-const as = nlp.as;
-
-// Neighbor-joining
-import { RapidNeighborJoining } from "neighbor-joining";
-import { makeWords } from "../../utils/clearWords.js";
 
 // Helper function to normalize data structure
 function normalizeData(data, fileType = 'csv') {
@@ -54,75 +42,65 @@ function normalizeData(data, fileType = 'csv') {
   return normalized;
 }
 
-// Process data and generate visualizations
-function processData(normalizedData) {
-  // -----------------------------------------------------  1° - Create distance matrix
-  let distance_matrix = [];
-  let line_simi = [];
-  let docA, bowA, docB, bowB, simi;
-  let sortable = [];
+// Process data using the enhanced ML service
+async function processDataWithEnhancedPipeline(normalizedData) {
+  try {
+    // Extract texts and labels for the enhanced pipeline
+    const texts = normalizedData.map(item => {
+      // Combine title and content for richer text analysis
+      const fullText = [item.title, item.content].filter(Boolean).join('. ');
+      return fullText || item.title || `Document ${item.id}`;
+    });
 
-  for (let i = 0; i < normalizedData.length; i++) {
-    const contentA = normalizedData[i].content || normalizedData[i].title || "";
-    docA = nlp.readDoc(contentA);
+    // Create enhanced labels that include category information if available
+    const labels = normalizedData.map((item, index) => {
+      if (item.category && item.category.trim()) {
+        // Format: CATEGORY_NUMBER_TITLE (enhanced format for clustering)
+        const cleanCategory = item.category.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
+        const cleanTitle = (item.title || `Document_${item.id}`).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 50);
+        return `${cleanCategory}_${String(index + 1).padStart(3, '0')}_${cleanTitle}`;
+      } else {
+        // Simple format for uncategorized data (will trigger auto-discovery)
+        return item.title || `Document_${item.id}`;
+      }
+    });
 
-    // Create tokens, filter only words and remove stop words
-    bowA = docA
-      .tokens()
-      .filter((t) => t.out(its.type) === "word" && !t.out(its.stopWordFlag))
-      .out(its.normal, as.bow);
+    console.log(`Processing ${texts.length} documents with enhanced pipeline`);
+    console.log(`Labels format: ${labels[0]}`); // Log first label to verify format
 
-    // Wordcloud part
-    let newA = JSON.parse(JSON.stringify(bowA));
-    for (var elem in newA) {
-      sortable.push({ word: elem, qtd: newA[elem] });
-    }
+    // Call the enhanced ML service
+    const mlResult = await mlService.generateTree(texts, labels);
 
-    line_simi = [];
-    for (let j = 0; j < normalizedData.length; j++) {
-      const contentB = normalizedData[j].content || normalizedData[j].title || "";
-      docB = nlp.readDoc(contentB);
-      bowB = docB
-        .tokens()
-        .filter((t) => t.out(its.type) === "word" && !t.out(its.stopWordFlag))
-        .out(its.normal, as.bow);
-      simi = i != j ? similarity.bow.cosine(bowA, bowB) : 0;
-      line_simi.push(simi);
-    }
-    distance_matrix.push(line_simi);
+    // Transform ML service response to expected frontend format
+    const result = {
+      objData: normalizedData,
+      phyloNewickData: mlResult.newick || mlResult.phyloNewickData,
+      wordcloudData: mlResult.wordcloud_data || mlResult.wordcloudData || [],
+      timevisData: generateTimeVisData(normalizedData),
+      locationData: generateLocationData(normalizedData),
+      // Include enhanced pipeline metadata
+      pipelineInfo: {
+        method: mlResult.clustering_method || 'enhanced_pipeline',
+        enhanced: true,
+        clusters: mlResult.num_clusters || 0,
+        hasRichLabels: mlResult.has_rich_labels || false,
+        clusterNames: mlResult.cluster_names || []
+      }
+    };
+
+    console.log(`Enhanced pipeline result: ${result.pipelineInfo.method}, clusters: ${result.pipelineInfo.clusters}`);
+
+    return result;
+
+  } catch (error) {
+    console.error('Enhanced pipeline error:', error);
+    // If enhanced pipeline fails, return error - no fallback to old method
+    throw new Error(`Enhanced pipeline processing failed: ${error.message}`);
   }
+}
 
-  // Wordcloud processing
-  var listOfWords = [];
-  sortable.reduce(function (ress, value) {
-    if (!ress[value.word]) {
-      ress[value.word] = { word: value.word, qtd: 0 };
-      listOfWords.push(ress[value.word]);
-    }
-    ress[value.word].qtd += value.qtd;
-    return ress;
-  }, {});
-
-  listOfWords.sort(function (a, b) {
-    return b.qtd - a.qtd;
-  });
-
-  // Return WordCloud List
-  const wordcloudData = makeWords(listOfWords, 100);
-
-  // -----------------------------------------------------  2° - Make NJ Tree
-  let taxa = [];
-  normalizedData.forEach((d) =>
-    taxa.push({
-      name: d.title || "Untitled",
-    })
-  );
-
-  var RNJ = new RapidNeighborJoining(distance_matrix, taxa);
-  RNJ.run();
-  var phyloNewickData = RNJ.getAsNewick();
-
-  // -------- Make TimeVis Data
+// Generate time visualization data
+function generateTimeVisData(normalizedData) {
   const timevisData = [];
   if (normalizedData[0] && normalizedData[0].date) {
     normalizedData.forEach((article) => {
@@ -134,14 +112,21 @@ function processData(normalizedData) {
       }
     });
   }
+  return timevisData;
+}
 
-  return {
-    objData: normalizedData,
-    phyloNewickData,
-    wordcloudData,
-    timevisData,
-    locationData: "", // Can be enhanced with location processing
-  };
+// Generate location data (placeholder for future enhancement)
+function generateLocationData(normalizedData) {
+  // Can be enhanced with location processing
+  const locations = normalizedData
+    .filter(item => item.location && item.location.trim())
+    .map(item => ({
+      location: item.location,
+      title: item.title,
+      id: item.id
+    }));
+
+  return locations.length > 0 ? locations : [];
 }
 
 // Upload CSV files
@@ -166,7 +151,7 @@ router.post("/files", multerConfig.single("file"), validateFileUpload, async (re
       throw error;
     }
 
-    // Normalize and process data
+    // Normalize and process data with enhanced pipeline
     const normalizedData = normalizeData(data, 'csv');
 
     // Validate we have content to process
@@ -177,13 +162,18 @@ router.post("/files", multerConfig.single("file"), validateFileUpload, async (re
       throw error;
     }
 
-    const result = processData(normalizedData);
+    console.log(`Processing CSV upload with ${normalizedData.length} records using enhanced pipeline`);
+
+    // Use enhanced pipeline instead of local processing
+    const result = await processDataWithEnhancedPipeline(normalizedData);
 
     return res.json({
       success: true,
-      data: result
+      data: result,
+      message: "Processed with enhanced phylogenetic pipeline"
     });
   } catch (error) {
+    console.error('CSV upload error:', error);
     next(error);
   }
 });
@@ -220,7 +210,7 @@ router.post("/json", multerConfig.single("file"), async (req, res, next) => {
       throw error;
     }
 
-    // Normalize and process data
+    // Normalize and process data with enhanced pipeline
     const normalizedData = normalizeData(data, 'json');
 
     // Validate we have content to process
@@ -231,13 +221,18 @@ router.post("/json", multerConfig.single("file"), async (req, res, next) => {
       throw error;
     }
 
-    const result = processData(normalizedData);
+    console.log(`Processing JSON upload with ${normalizedData.length} records using enhanced pipeline`);
+
+    // Use enhanced pipeline instead of local processing
+    const result = await processDataWithEnhancedPipeline(normalizedData);
 
     return res.json({
       success: true,
-      data: result
+      data: result,
+      message: "Processed with enhanced phylogenetic pipeline"
     });
   } catch (error) {
+    console.error('JSON upload error:', error);
     next(error);
   }
 });
@@ -246,7 +241,7 @@ router.post("/json", multerConfig.single("file"), async (req, res, next) => {
 router.get("/files", (req, res) => {
   return res.json({
     success: true,
-    msg: "Upload endpoints ready!",
+    msg: "Enhanced upload endpoints ready!",
     endpoints: {
       csv: "POST /upload/files",
       json: "POST /upload/json"
@@ -254,6 +249,12 @@ router.get("/files", (req, res) => {
     requiredFields: {
       required: ["content or title"],
       optional: ["id", "date", "category", "location", "authors", "link"]
+    },
+    features: {
+      pipeline: "Enhanced phylogenetic pipeline with intelligent clustering",
+      clustering: "Automatic discovery for uncategorized data",
+      labels: "Rich Newick trees with meaningful internal nodes",
+      wordcloud: "Cluster-based word cloud generation"
     }
   });
 });

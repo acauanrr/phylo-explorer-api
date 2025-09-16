@@ -55,27 +55,45 @@ router.post('/search', async (req, res) => {
 
     let searchResults;
 
-    // Try to use ML service's search-node endpoint if available
+    // Try to use HF Space Gradio endpoint for search
     try {
       const mlServiceUrl = process.env.ML_SERVICE_URL || 'https://acauanrr-phylo-ml-service.hf.space';
       const mlResponse = await axios.post(
-        `${mlServiceUrl}/api/search-node`,
+        `${mlServiceUrl}/api/search_node`,  // Gradio endpoint
         {
-          node_name: searchQuery,
-          node_type: node_type || 'general'
+          data: [searchQuery]  // Gradio format: array of inputs
         },
         {
           headers: { 'Content-Type': 'application/json' },
-          timeout: 10000 // 10 second timeout
+          timeout: 15000 // 15 second timeout for web scraping
         }
       );
 
-      if (mlResponse.data && mlResponse.data.success && mlResponse.data.data) {
-        searchResults = mlResponse.data.data;
-        console.log('Using ML service search results');
+      if (mlResponse.data && mlResponse.data.data && mlResponse.data.data[0]) {
+        // Parse the JSON response from Gradio
+        const gradioResult = JSON.parse(mlResponse.data.data[0]);
+        if (gradioResult && gradioResult.status === 'success') {
+          // Convert Gradio result to expected format
+          searchResults = {
+            node_name: searchQuery,
+            title: gradioResult.title,
+            summary: gradioResult.summary,
+            image_url: gradioResult.image_url || null,
+            source_url: gradioResult.source_url,
+            publication_date: new Date().toISOString().split('T')[0],
+            wikipedia: gradioResult.wikipedia,
+            web_results: gradioResult.web_results || [],
+            enhanced_results: gradioResult.web_results || [],
+            locations: [],
+            geo_data: [],
+            category: 'General',
+            headline: gradioResult.title || searchQuery
+          };
+          console.log('Using HF Space Gradio search results');
+        }
       }
     } catch (mlError) {
-      console.log('ML service search not available, using fallback web search:', mlError.message);
+      console.log('HF Space search not available, using fallback web search:', mlError.message);
     }
 
     // Fallback to local web search service if ML service didn't work
