@@ -1,5 +1,7 @@
 import express from 'express';
+import axios from 'axios';
 import mlService from '../services/mlService.js';
+import webSearchService from '../services/webSearchService.js';
 
 const router = express.Router();
 
@@ -36,7 +38,7 @@ router.post('/generate-tree', async (req, res) => {
 
 /**
  * POST /api/phylo/search
- * Search for node information
+ * Search for node information using web search and optionally ML service
  */
 router.post('/search', async (req, res) => {
   try {
@@ -50,25 +52,45 @@ router.post('/search', async (req, res) => {
       });
     }
 
-    // For now, return mock data that matches the expected format
-    // This will be replaced with actual search functionality later
-    const mockData = {
-      node_name: searchQuery,
-      node_type: node_type || 'general',
-      title: searchQuery.replace(/_/g, ' '),
-      description: `Information about ${searchQuery}`,
-      content: `This is detailed content for the node: ${searchQuery}`,
-      metadata: {
-        created_at: new Date().toISOString(),
-        category: node_type || 'general'
-      },
-      locations: [],
-      geo_data: []
-    };
+    let searchResults;
+
+    // Try to use ML service's search-node endpoint if available
+    try {
+      const mlServiceUrl = process.env.ML_SERVICE_URL || 'https://acauanrr-phylo-ml-service.hf.space';
+      const mlResponse = await axios.post(
+        `${mlServiceUrl}/api/search-node`,
+        {
+          node_name: searchQuery,
+          node_type: node_type || 'general'
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000 // 10 second timeout
+        }
+      );
+
+      if (mlResponse.data && mlResponse.data.success && mlResponse.data.data) {
+        searchResults = mlResponse.data.data;
+        console.log('Using ML service search results');
+      }
+    } catch (mlError) {
+      console.log('ML service search not available, using fallback web search:', mlError.message);
+    }
+
+    // Fallback to local web search service if ML service didn't work
+    if (!searchResults) {
+      searchResults = await webSearchService.search(searchQuery);
+      console.log('Using local web search service');
+    }
+
+    // Add node type if provided
+    if (node_type) {
+      searchResults.node_type = node_type;
+    }
 
     res.json({
       success: true,
-      data: mockData,
+      data: searchResults,
       query: searchQuery
     });
   } catch (error) {
