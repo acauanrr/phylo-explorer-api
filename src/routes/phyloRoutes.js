@@ -5,6 +5,96 @@ import webSearchService from '../services/webSearchService.js';
 
 const router = express.Router();
 
+/**
+ * Extract basic location data from search query and results (fallback)
+ */
+async function extractBasicLocationData(query, searchResults) {
+  const locations = [];
+  const geo_data = [];
+
+  try {
+    // Common city/country patterns
+    const locationPatterns = [
+      /\b(New York|NYC)\b/gi,
+      /\b(Los Angeles|LA)\b/gi,
+      /\b(Chicago)\b/gi,
+      /\b(London)\b/gi,
+      /\b(Paris)\b/gi,
+      /\b(Tokyo)\b/gi,
+      /\b(Berlin)\b/gi,
+      /\b(Washington|DC)\b/gi,
+      /\b(Boston)\b/gi,
+      /\b(San Francisco)\b/gi
+    ];
+
+    // Predefined coordinates for common locations
+    const locationCoords = {
+      'New York': { lat: 40.7127281, lon: -74.0060152, country: 'United States' },
+      'NYC': { lat: 40.7127281, lon: -74.0060152, country: 'United States' },
+      'Los Angeles': { lat: 34.0522265, lon: -118.2436596, country: 'United States' },
+      'LA': { lat: 34.0522265, lon: -118.2436596, country: 'United States' },
+      'Chicago': { lat: 41.8755616, lon: -87.6244212, country: 'United States' },
+      'London': { lat: 51.5073219, lon: -0.1276474, country: 'United Kingdom' },
+      'Paris': { lat: 48.8566969, lon: 2.3514616, country: 'France' },
+      'Tokyo': { lat: 35.6828387, lon: 139.7594549, country: 'Japan' },
+      'Berlin': { lat: 52.5170365, lon: 13.3888599, country: 'Germany' },
+      'Washington': { lat: 38.8950368, lon: -77.0365427, country: 'United States' },
+      'DC': { lat: 38.8950368, lon: -77.0365427, country: 'United States' },
+      'Boston': { lat: 42.3554334, lon: -71.060511, country: 'United States' },
+      'San Francisco': { lat: 37.7790262, lon: -122.4199061, country: 'United States' }
+    };
+
+    const foundLocations = new Set();
+
+    // Check query for locations
+    for (const pattern of locationPatterns) {
+      const matches = query.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          const normalizedMatch = match.trim();
+          if (locationCoords[normalizedMatch] && !foundLocations.has(normalizedMatch)) {
+            foundLocations.add(normalizedMatch);
+
+            locations.push({
+              name: normalizedMatch,
+              type: 'city',
+              confidence: 0.8
+            });
+
+            geo_data.push({
+              name: normalizedMatch,
+              display_name: `${normalizedMatch}, ${locationCoords[normalizedMatch].country}`,
+              lat: locationCoords[normalizedMatch].lat,
+              lon: locationCoords[normalizedMatch].lon,
+              country: locationCoords[normalizedMatch].country,
+              type: 'administrative',
+              importance: 0.8
+            });
+          }
+        });
+      }
+    }
+
+    return {
+      locations: Array.from(locations),
+      geo_data: Array.from(geo_data),
+      has_location_data: locations.length > 0,
+      total_locations: locations.length,
+      total_coordinates: geo_data.length
+    };
+
+  } catch (error) {
+    console.error('Location extraction error:', error);
+    return {
+      locations: [],
+      geo_data: [],
+      has_location_data: false,
+      total_locations: 0,
+      total_coordinates: 0
+    };
+  }
+}
+
 
 /**
  * POST /api/phylo/generate-tree
@@ -146,12 +236,17 @@ router.post('/search', async (req, res) => {
       searchResults = await webSearchService.search(searchQuery);
       console.log('📋 Using local web search service fallback');
 
-      // Ensure location fields exist even in fallback
-      searchResults.locations = searchResults.locations || [];
-      searchResults.geo_data = searchResults.geo_data || [];
-      searchResults.has_location_data = false;
-      searchResults.total_locations = 0;
-      searchResults.total_coordinates = 0;
+      // Try to extract location data from the search query and results
+      const locationData = await extractBasicLocationData(searchQuery, searchResults);
+
+      // Add location data to results
+      searchResults.locations = locationData.locations;
+      searchResults.geo_data = locationData.geo_data;
+      searchResults.has_location_data = locationData.has_location_data;
+      searchResults.total_locations = locationData.total_locations;
+      searchResults.total_coordinates = locationData.total_coordinates;
+
+      console.log('📍 Fallback location extraction found:', locationData.total_locations, 'locations');
     }
 
     // Add node type if provided
