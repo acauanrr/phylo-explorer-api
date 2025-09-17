@@ -111,8 +111,8 @@ async function extractAndGeocodeLocations(text) {
     let locationNames = [];
     try {
       const nerResponse = await axios.post(
-        `${mlServiceUrl}/extract_locations`,
-        { text: text },
+        `${mlServiceUrl}/api/extract-locations`,
+        { data: [text] },  // Gradio expects data array format
         {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000 // 10 second timeout for NER
@@ -469,13 +469,13 @@ router.get('/debug/services', async (req, res) => {
       console.log('🔍 [DEBUG] Testing ML service NER at:', `${mlServiceUrl}/extract_locations`);
 
       const nerResponse = await axios.post(
-        `${mlServiceUrl}/extract_locations`,
-        { text: "Test location extraction with New York and Paris" },
+        `${mlServiceUrl}/api/extract-locations`,
+        { data: ["Test location extraction with New York and Paris"] },
         { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
       );
 
       results.services.ml_service_ner = {
-        url: `${mlServiceUrl}/extract_locations`,
+        url: `${mlServiceUrl}/api/extract-locations`,
         status: 'healthy',
         response_status: nerResponse.status,
         locations_extracted: nerResponse.data.locations || [],
@@ -484,7 +484,7 @@ router.get('/debug/services', async (req, res) => {
     } catch (nerError) {
       console.error('❌ [DEBUG] ML service NER test failed:', nerError.message);
       results.services.ml_service_ner = {
-        url: `${process.env.ML_SERVICE_LOCAL_URL || process.env.ML_SERVICE_HF_URL}/extract_locations`,
+        url: `${process.env.ML_SERVICE_LOCAL_URL || process.env.ML_SERVICE_HF_URL}/api/extract-locations`,
         status: 'error',
         error: nerError.message,
         error_code: nerError.code
