@@ -64,12 +64,25 @@ router.post('/search', async (req, res) => {
       const mlServiceUrl = process.env.ML_SERVICE_LOCAL_URL || process.env.ML_SERVICE_URL || 'https://acauanrr-phylo-ml-service.hf.space';
       console.log('📡 Calling ML service at:', mlServiceUrl);
 
+      // Use different endpoints and data formats based on service type
+      const isLocal = mlServiceUrl.includes('localhost') || mlServiceUrl.includes('127.0.0.1');
+      const endpoint = isLocal ? '/api/search' : '/api/search-node';
+      const requestData = isLocal
+        ? {
+            query: searchQuery,
+            node_name: searchQuery,
+            node_type: node_type || 'general'
+          }
+        : {
+            node_name: searchQuery,
+            node_type: node_type || 'general'
+          };
+
+      console.log('📡 Using endpoint:', endpoint, 'isLocal:', isLocal);
+
       const mlResponse = await axios.post(
-        `${mlServiceUrl}/api/search-node`,  // Direct Flask API endpoint
-        {
-          node_name: searchQuery,
-          node_type: node_type || 'general'
-        },
+        `${mlServiceUrl}${endpoint}`,
+        requestData,
         {
           headers: { 'Content-Type': 'application/json' },
           timeout: 30000 // 30 second timeout for web scraping and geocoding
@@ -79,8 +92,21 @@ router.post('/search', async (req, res) => {
       console.log('📋 ML service response status:', mlResponse.status);
       console.log('📋 ML service response data keys:', Object.keys(mlResponse.data || {}));
 
-      if (mlResponse.data && mlResponse.data.success && mlResponse.data.data) {
-        const mlResult = mlResponse.data.data;
+      // Handle different response formats
+      let mlResult;
+      if (isLocal) {
+        // Local service returns data directly
+        if (mlResponse.data && mlResponse.data.status === 'success') {
+          mlResult = mlResponse.data;
+        }
+      } else {
+        // HuggingFace service returns nested structure
+        if (mlResponse.data && mlResponse.data.success && mlResponse.data.data) {
+          mlResult = mlResponse.data.data;
+        }
+      }
+
+      if (mlResult) {
         console.log('📍 Locations found:', mlResult.locations?.length || 0);
         console.log('🗺️ Geo data points:', mlResult.geo_data?.length || 0);
 
