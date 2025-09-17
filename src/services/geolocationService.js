@@ -182,7 +182,36 @@ class GeolocationService {
         return {
             configured: this.initialized,
             provider: 'OpenCage',
-            mock_locations_available: Object.keys(this.mockLocations).length
+            mock_locations_available: Object.keys(this.mockLocations).length,
+            api_key_present: !!process.env.OPENCAGE_API_KEY,
+            api_key_valid: this.initialized,
+            api_key_length: process.env.OPENCAGE_API_KEY ? process.env.OPENCAGE_API_KEY.length : 0,
+            environment: process.env.NODE_ENV || 'development'
+        };
+    }
+
+    /**
+     * Get detailed diagnostic information for debugging
+     * @returns {Object} Detailed diagnostic information
+     */
+    getDiagnostics() {
+        return {
+            service_name: 'GeolocationService',
+            provider: 'OpenCage',
+            configured: this.initialized,
+            environment: process.env.NODE_ENV || 'development',
+            api_key_status: {
+                present: !!process.env.OPENCAGE_API_KEY,
+                length: process.env.OPENCAGE_API_KEY ? process.env.OPENCAGE_API_KEY.length : 0,
+                valid_format: this.initialized,
+                is_placeholder: process.env.OPENCAGE_API_KEY === 'your_api_key_here'
+            },
+            mock_data: {
+                available: true,
+                location_count: Object.keys(this.mockLocations).length,
+                sample_locations: Object.keys(this.mockLocations).slice(0, 5)
+            },
+            last_status_check: new Date().toISOString()
         };
     }
 }

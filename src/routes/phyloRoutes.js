@@ -396,4 +396,174 @@ router.get('/health', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/phylo/debug/config
+ * Debug endpoint to check environment configuration
+ */
+router.get('/debug/config', async (req, res) => {
+  try {
+    const config = {
+      node_env: process.env.NODE_ENV,
+      port: process.env.PORT,
+      cors_origin: process.env.CORS_ORIGIN,
+      ml_service_local_url: process.env.ML_SERVICE_LOCAL_URL,
+      ml_service_hf_url: process.env.ML_SERVICE_HF_URL,
+      opencage_api_key_configured: !!(process.env.OPENCAGE_API_KEY && process.env.OPENCAGE_API_KEY !== 'your_api_key_here'),
+      opencage_api_key_length: process.env.OPENCAGE_API_KEY ? process.env.OPENCAGE_API_KEY.length : 0,
+      geocoding_service_status: geolocationService.getStatus(),
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('🔧 [DEBUG] Environment configuration requested:', config);
+
+    res.json({
+      success: true,
+      config: config,
+      note: "This debug endpoint shows environment configuration without exposing sensitive data"
+    });
+  } catch (error) {
+    console.error('🚨 [DEBUG] Config check error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/phylo/debug/services
+ * Debug endpoint to test external service connectivity
+ */
+router.get('/debug/services', async (req, res) => {
+  try {
+    const results = {
+      timestamp: new Date().toISOString(),
+      services: {}
+    };
+
+    // Test ML Service connectivity
+    try {
+      const mlServiceUrl = process.env.ML_SERVICE_LOCAL_URL || process.env.ML_SERVICE_HF_URL || 'https://acauanrr-phylo-ml-service.hf.space';
+      console.log('🔍 [DEBUG] Testing ML service at:', mlServiceUrl);
+
+      const healthResponse = await axios.get(`${mlServiceUrl}/health`, { timeout: 10000 });
+      results.services.ml_service = {
+        url: mlServiceUrl,
+        status: 'healthy',
+        response_status: healthResponse.status,
+        response_data: healthResponse.data
+      };
+    } catch (mlError) {
+      console.error('❌ [DEBUG] ML service test failed:', mlError.message);
+      results.services.ml_service = {
+        url: process.env.ML_SERVICE_LOCAL_URL || process.env.ML_SERVICE_HF_URL,
+        status: 'error',
+        error: mlError.message,
+        error_code: mlError.code
+      };
+    }
+
+    // Test ML Service location extraction endpoint
+    try {
+      const mlServiceUrl = process.env.ML_SERVICE_LOCAL_URL || process.env.ML_SERVICE_HF_URL || 'https://acauanrr-phylo-ml-service.hf.space';
+      console.log('🔍 [DEBUG] Testing ML service NER at:', `${mlServiceUrl}/extract_locations`);
+
+      const nerResponse = await axios.post(
+        `${mlServiceUrl}/extract_locations`,
+        { text: "Test location extraction with New York and Paris" },
+        { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+      );
+
+      results.services.ml_service_ner = {
+        url: `${mlServiceUrl}/extract_locations`,
+        status: 'healthy',
+        response_status: nerResponse.status,
+        locations_extracted: nerResponse.data.locations || [],
+        location_count: nerResponse.data.count || 0
+      };
+    } catch (nerError) {
+      console.error('❌ [DEBUG] ML service NER test failed:', nerError.message);
+      results.services.ml_service_ner = {
+        url: `${process.env.ML_SERVICE_LOCAL_URL || process.env.ML_SERVICE_HF_URL}/extract_locations`,
+        status: 'error',
+        error: nerError.message,
+        error_code: nerError.code
+      };
+    }
+
+    // Test Geocoding Service
+    try {
+      console.log('🔍 [DEBUG] Testing geocoding service');
+      const geoResult = await geolocationService.getGeoData('New York');
+      results.services.geocoding_service = {
+        status: 'healthy',
+        configured: geolocationService.isConfigured(),
+        test_result: geoResult,
+        provider: 'OpenCage',
+        mock_fallback: !geolocationService.isConfigured()
+      };
+    } catch (geoError) {
+      console.error('❌ [DEBUG] Geocoding service test failed:', geoError.message);
+      results.services.geocoding_service = {
+        status: 'error',
+        error: geoError.message,
+        configured: geolocationService.isConfigured()
+      };
+    }
+
+    console.log('✅ [DEBUG] Service connectivity test completed');
+    res.json({
+      success: true,
+      results: results
+    });
+
+  } catch (error) {
+    console.error('🚨 [DEBUG] Service test error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/phylo/debug/pipeline-test
+ * Debug endpoint to test the complete location extraction pipeline
+ */
+router.post('/debug/pipeline-test', async (req, res) => {
+  try {
+    const { text } = req.body;
+    const testText = text || "Test pipeline with New York, London, and Tokyo locations";
+
+    console.log('🧪 [DEBUG] Testing complete pipeline with text:', testText);
+
+    // Test the complete pipeline
+    const pipelineResult = await extractAndGeocodeLocations(testText);
+
+    const result = {
+      success: true,
+      test_text: testText,
+      timestamp: new Date().toISOString(),
+      pipeline_result: pipelineResult,
+      summary: {
+        extraction_method: pipelineResult.extraction_method,
+        locations_found: pipelineResult.total_locations,
+        coordinates_available: pipelineResult.total_coordinates,
+        has_location_data: pipelineResult.has_location_data
+      }
+    };
+
+    console.log('✅ [DEBUG] Pipeline test completed:', result.summary);
+    res.json(result);
+
+  } catch (error) {
+    console.error('🚨 [DEBUG] Pipeline test error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 export default router;
