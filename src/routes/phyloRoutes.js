@@ -74,8 +74,12 @@ router.post('/search', async (req, res) => {
             node_type: node_type || 'general'
           }
         : {
-            node_name: searchQuery,
-            node_type: node_type || 'general'
+            data: [
+              {
+                node_name: searchQuery,
+                node_type: node_type || 'general'
+              }
+            ]
           };
 
       console.log('📡 Using endpoint:', endpoint, 'isLocal:', isLocal);
