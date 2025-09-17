@@ -2,6 +2,7 @@ import express from 'express';
 import axios from 'axios';
 import mlService from '../services/mlService.js';
 import webSearchService from '../services/webSearchService.js';
+import geolocationService from '../services/geolocationService.js';
 
 const router = express.Router();
 
@@ -91,6 +92,102 @@ async function extractBasicLocationData(query, searchResults) {
       has_location_data: false,
       total_locations: 0,
       total_coordinates: 0
+    };
+  }
+}
+
+/**
+ * Enhanced location extraction and geocoding pipeline (Phase 2)
+ * Uses spaCy NER from ML service + OpenCage geocoding for rich geographic data
+ */
+async function extractAndGeocodeLocations(text) {
+  try {
+    console.log('🔄 Starting enhanced location extraction pipeline...');
+
+    // Step 1: Extract location entities using spaCy NER from ML service
+    const mlServiceUrl = process.env.ML_SERVICE_LOCAL_URL || process.env.ML_SERVICE_URL || 'https://acauanrr-phylo-ml-service.hf.space';
+    console.log('📡 Calling ML service location extraction at:', mlServiceUrl);
+
+    let locationNames = [];
+    try {
+      const nerResponse = await axios.post(
+        `${mlServiceUrl}/extract_locations`,
+        { text: text },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000 // 10 second timeout for NER
+        }
+      );
+
+      if (nerResponse.data && nerResponse.data.success && nerResponse.data.locations) {
+        locationNames = nerResponse.data.locations;
+        console.log(`🏷️ NER extracted ${locationNames.length} locations:`, locationNames);
+      }
+    } catch (nerError) {
+      console.log('❌ ML service NER failed, using fallback extraction:', nerError.message);
+      // Fallback to basic location extraction
+      const fallbackResult = await extractBasicLocationData(text, []);
+      locationNames = fallbackResult.locations.map(loc => loc.name);
+    }
+
+    if (locationNames.length === 0) {
+      console.log('ℹ️ No locations found to geocode');
+      return {
+        locations: [],
+        geo_data: [],
+        has_location_data: false,
+        total_locations: 0,
+        total_coordinates: 0,
+        extraction_method: 'none'
+      };
+    }
+
+    // Step 2: Geocode the extracted locations
+    console.log('🌍 Starting geocoding for extracted locations...');
+    const geoResults = await geolocationService.batchGeocode(locationNames);
+
+    // Step 3: Format results for consistency with existing code
+    const locations = geoResults.map(geo => ({
+      name: geo.query,
+      type: geo.type || 'location',
+      confidence: geo.confidence || 0.8,
+      formatted: geo.formatted
+    }));
+
+    const geo_data = geoResults.map(geo => ({
+      name: geo.query,
+      display_name: geo.formatted,
+      lat: geo.lat,
+      lon: geo.lon,
+      country: geo.country,
+      country_code: geo.country_code,
+      type: geo.type || 'administrative',
+      importance: geo.confidence || 0.8,
+      mock: geo.mock || false
+    }));
+
+    console.log(`✅ Enhanced pipeline completed: ${locations.length} locations, ${geo_data.length} geocoded`);
+
+    return {
+      locations,
+      geo_data,
+      has_location_data: locations.length > 0,
+      total_locations: locations.length,
+      total_coordinates: geo_data.length,
+      extraction_method: 'enhanced_ner_geocoding',
+      geocoding_service: geolocationService.getStatus()
+    };
+
+  } catch (error) {
+    console.error('🚨 Enhanced location pipeline error:', error);
+
+    // Fallback to basic extraction
+    console.log('🔄 Falling back to basic location extraction...');
+    const fallbackResult = await extractBasicLocationData(text, []);
+    return {
+      ...fallbackResult,
+      extraction_method: 'fallback_basic',
+      error: error.message
     };
   }
 }
@@ -235,19 +332,23 @@ router.post('/search', async (req, res) => {
     if (!searchResults) {
       searchResults = await webSearchService.search(searchQuery);
       console.log('📋 Using local web search service fallback');
-
-      // Try to extract location data from the search query and results
-      const locationData = await extractBasicLocationData(searchQuery, searchResults);
-
-      // Add location data to results
-      searchResults.locations = locationData.locations;
-      searchResults.geo_data = locationData.geo_data;
-      searchResults.has_location_data = locationData.has_location_data;
-      searchResults.total_locations = locationData.total_locations;
-      searchResults.total_coordinates = locationData.total_coordinates;
-
-      console.log('📍 Fallback location extraction found:', locationData.total_locations, 'locations');
     }
+
+    // Apply enhanced location extraction and geocoding pipeline (Phase 2)
+    // This works for both ML service results and fallback web search results
+    console.log('🚀 Applying enhanced location extraction and geocoding pipeline...');
+    const enhancedLocationData = await extractAndGeocodeLocations(searchQuery);
+
+    // Update search results with enhanced location data
+    searchResults.locations = enhancedLocationData.locations;
+    searchResults.geo_data = enhancedLocationData.geo_data;
+    searchResults.has_location_data = enhancedLocationData.has_location_data;
+    searchResults.total_locations = enhancedLocationData.total_locations;
+    searchResults.total_coordinates = enhancedLocationData.total_coordinates;
+    searchResults.extraction_method = enhancedLocationData.extraction_method;
+    searchResults.geocoding_service = enhancedLocationData.geocoding_service;
+
+    console.log(`📍 Enhanced location pipeline found: ${enhancedLocationData.total_locations} locations using ${enhancedLocationData.extraction_method}`);
 
     // Add node type if provided
     if (node_type) {
