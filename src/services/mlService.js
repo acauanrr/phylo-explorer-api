@@ -80,47 +80,57 @@ class MLService {
           throw localError; // For now, don't try Gradio for local
         }
       } else {
-        // For production, use direct Flask API to connect to HuggingFace Space
-        console.log('🔍 Attempting to connect to HuggingFace Space Flask API at:', this.hfUrl);
-        const axios = (await import('axios')).default;
-        console.log('📤 Sending request to HuggingFace Space Flask API...');
-        const response = await axios.post(
-          `${this.hfUrl}/api/generate-tree`,
-          { texts, labels },
-          {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 60000 // 60 second timeout for HF Space
+        // For production, use Gradio client to connect to HuggingFace Space
+        console.log('🔍 Connecting to HuggingFace Space via Gradio client...');
+
+        const app = await client(this.hfSpaceId);
+
+        // Format inputs as JSON strings as expected by the Gradio interface
+        const textsJson = JSON.stringify(texts);
+        const labelsJson = JSON.stringify(labels || []);
+
+        // Call the /generate-tree endpoint
+        console.log('📤 Sending request to HuggingFace Space via Gradio...');
+        const response = await app.predict("/generate-tree", [textsJson, labelsJson]);
+
+        console.log('Gradio response received:', response);
+
+        // Parse the Gradio response
+        if (response && response.data && response.data[0]) {
+          const gradioOutput = response.data[0];
+          console.log('Gradio output (first 500 chars):', gradioOutput.substring(0, 500));
+
+          // Extract Newick tree from the text output
+          const newickMatch = gradioOutput.match(/🌳 Enhanced Newick Tree:\s*\n(.+?)(\n|$)/);
+          if (newickMatch) {
+            const newick = newickMatch[1].trim();
+            console.log('✅ Extracted Newick tree:', newick);
+
+            // Extract other information
+            const numTextsMatch = gradioOutput.match(/Number of texts: (\d+)/);
+            const numLabelsMatch = gradioOutput.match(/Number of labels: (\d+)/);
+
+            result = {
+              status: 'success',
+              newick: newick,
+              num_texts: numTextsMatch ? parseInt(numTextsMatch[1]) : texts.length,
+              num_labels: numLabelsMatch ? parseInt(numLabelsMatch[1]) : labels.length,
+              enhanced_labels: labels,
+              statistics: { algorithm: 'neighbor_joining_scikit_bio', num_taxa: texts.length }
+            };
+          } else {
+            // If we can't parse the output, return it for debugging
+            console.log('❌ Could not extract Newick tree from Gradio output');
+            result = {
+              status: 'success',
+              newick: '(fallback);',
+              raw_output: gradioOutput,
+              num_texts: texts.length,
+              num_labels: labels.length
+            };
           }
-        );
-
-        // Process Flask API JSON response
-        const flaskResponse = response.data;
-        console.log('📤 HuggingFace Space Flask API response received');
-        console.log('Flask response status:', flaskResponse?.status);
-        console.log('Flask response newick:', flaskResponse?.newick);
-        console.log('Flask response original_labels:', flaskResponse?.original_labels);
-
-        if (flaskResponse.status === 'success' && flaskResponse.newick) {
-          result = {
-            status: 'success',
-            newick: flaskResponse.newick,
-            num_texts: flaskResponse.num_texts || texts.length,
-            num_labels: flaskResponse.original_labels ? flaskResponse.original_labels.length : (flaskResponse.num_texts || labels.length),
-            enhanced_labels: flaskResponse.enhanced_labels,
-            statistics: flaskResponse.statistics,
-            cluster_names: flaskResponse.cluster_names,
-            wordcloud_data: flaskResponse.wordcloud_data,
-            color_data: flaskResponse.color_data
-          };
         } else {
-          // Fallback for error responses
-          result = {
-            status: 'success',
-            newick: '(fallback);',
-            raw_output: `Error: ${flaskResponse.error || 'Unknown error'}`,
-            num_texts: texts.length,
-            num_labels: labels.length
-          };
+          throw new Error('Invalid response from Gradio client');
         }
       }
 
@@ -180,10 +190,13 @@ class MLService {
         const response = await axios.get(`${this.localUrl}/health`, { timeout: 5000 });
         return response.data;
       } else {
-        // For production, use direct Flask API to connect to HuggingFace Space
-        const axios = (await import('axios')).default;
-        const response = await axios.get(`${this.hfUrl}/health`, { timeout: 10000 });
-        return response.data;
+        // For HuggingFace Space, check if we can connect to Gradio client
+        const app = await client(this.hfSpaceId);
+        return {
+          status: 'healthy',
+          service: 'phylo-ml-service',
+          mode: 'huggingface-space'
+        };
       }
     } catch (error) {
       return {
