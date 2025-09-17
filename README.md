@@ -1,4 +1,4 @@
-# Phylo-Explorer API
+# Phylo-Explorer API - version: 1
 
 Backend API service for the Phylo-Explorer application, providing NLP processing and phylogenetic tree generation for text collections.
 
