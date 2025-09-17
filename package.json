@@ -13,6 +13,7 @@
     "npm": "9.x"
   },
   "dependencies": {
+    "@gradio/client": "^1.19.0",
     "axios": "^1.12.2",
     "cheerio": "^1.1.2",
     "cors": "^2.8.5",

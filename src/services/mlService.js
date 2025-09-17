@@ -1,9 +1,11 @@
-import axios from 'axios';
+import { client } from '@gradio/client';
 
 class MLService {
   constructor() {
-    // HuggingFace Space URL
-    this.mlServiceUrl = process.env.ML_SERVICE_URL || 'https://acauanrr-phylo-ml-service.hf.space';
+    // Use local ML service for development, HuggingFace Space for production
+    this.useLocal = process.env.NODE_ENV === 'development';
+    this.localUrl = 'http://localhost:5000';
+    this.hfSpaceId = 'acauanrr/phylo-ml-service';
   }
 
   /**
@@ -14,73 +16,78 @@ class MLService {
    */
   async generateTree(texts, labels = []) {
     try {
-      // First try the enhanced API format
-      let response;
-      try {
-        response = await axios.post(
-          `${this.mlServiceUrl}/api/generate-tree`,
-          {
-            texts,
-            labels
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            timeout: 30000 // 30 seconds timeout
-          }
-        );
-      } catch (firstError) {
-        console.log('First API format failed, trying Gradio format:', firstError.response?.status);
+      let result;
 
-        // If 422 error, try Gradio format
-        if (firstError.response?.status === 422) {
-          try {
-            response = await axios.post(
-              `${this.mlServiceUrl}/api/generate-tree`,
-              {
-                data: [texts, labels]  // Gradio format
-              },
-              {
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                timeout: 30000
-              }
-            );
-          } catch (gradioError) {
-            console.log('Gradio format also failed:', gradioError.response?.status);
-            throw firstError; // Throw original error
+      if (this.useLocal) {
+        // For local development, try direct Flask API first
+        try {
+          const axios = (await import('axios')).default;
+          const response = await axios.post(
+            `${this.localUrl}/api/generate-tree`,
+            { texts, labels },
+            {
+              headers: { 'Content-Type': 'application/json' },
+              timeout: 30000
+            }
+          );
+          result = response.data;
+        } catch (localError) {
+          console.log('Local Flask API failed, trying Gradio client for local:', localError.message);
+          throw localError; // For now, don't try Gradio for local
+        }
+      } else {
+        // For production, use Gradio client to connect to HuggingFace Space
+        console.log('Connecting to HuggingFace Space via Gradio client...');
+
+        const app = await client(this.hfSpaceId);
+
+        // Format inputs as JSON strings as expected by the Gradio interface
+        const textsJson = JSON.stringify(texts);
+        const labelsJson = JSON.stringify(labels || []);
+
+        // Call the /generate-tree endpoint
+        const response = await app.predict("/generate-tree", [textsJson, labelsJson]);
+
+        console.log('Gradio response:', response);
+
+        // Parse the Gradio response
+        if (response && response.data && response.data[0]) {
+          const gradioOutput = response.data[0];
+
+          // Extract Newick tree from the text output
+          const newickMatch = gradioOutput.match(/🌳 Enhanced Newick Tree:\s*\n(.+?)(\n|$)/);
+          if (newickMatch) {
+            const newick = newickMatch[1].trim();
+
+            // Extract other information
+            const numTextsMatch = gradioOutput.match(/Number of texts: (\d+)/);
+            const numLabelsMatch = gradioOutput.match(/Number of labels: (\d+)/);
+
+            result = {
+              status: 'success',
+              newick: newick,
+              num_texts: numTextsMatch ? parseInt(numTextsMatch[1]) : texts.length,
+              num_labels: numLabelsMatch ? parseInt(numLabelsMatch[1]) : labels.length
+            };
+          } else {
+            // If we can't parse the output, return it for debugging
+            result = {
+              status: 'success',
+              newick: '(fallback);',
+              raw_output: gradioOutput,
+              num_texts: texts.length,
+              num_labels: labels.length
+            };
           }
         } else {
-          throw firstError;
-        }
-      }
-
-      // Handle different response formats
-      let result = response.data;
-
-      // If it's a Gradio response, extract the actual data
-      if (result.data && Array.isArray(result.data) && result.data[0]) {
-        try {
-          result = JSON.parse(result.data[0]);
-        } catch (parseError) {
-          console.log('Failed to parse Gradio response, using as-is');
+          throw new Error('Invalid response from Gradio client');
         }
       }
 
       return result;
     } catch (error) {
       console.error('ML Service Error:', error.message);
-
-      // Enhanced fallback with mock enhanced pipeline data
-      if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' ||
-          error.response?.status === 422 || error.response?.status === 500) {
-        console.log('Using enhanced mock pipeline due to ML service issues');
-        return this.generateEnhancedMockTree(texts, labels);
-      }
-
-      throw new Error(`ML Service Error: ${error.message}`);
+      throw new Error(`ML Service Error: ${error.message}. ${this.useLocal ? 'Local ML service' : 'HuggingFace Space'} required for phylogenetic reconstruction.`);
     }
   }
 
@@ -91,18 +98,30 @@ class MLService {
    */
   async search(query) {
     try {
-      const response = await axios.post(
-        `${this.mlServiceUrl}/api/search`,
-        { query },
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
-        }
-      );
+      if (this.useLocal) {
+        // For local development, use direct Flask API
+        const axios = (await import('axios')).default;
+        const response = await axios.post(
+          `${this.localUrl}/api/search`,
+          { query },
+          {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 30000
+          }
+        );
+        return response.data;
+      } else {
+        // For production, use Gradio client
+        const app = await client(this.hfSpaceId);
+        const response = await app.predict("/search_node", [query]);
 
-      return response.data;
+        // Parse the JSON response from Gradio
+        if (response && response.data && response.data[0]) {
+          return JSON.parse(response.data[0]);
+        } else {
+          throw new Error('Invalid search response from Gradio client');
+        }
+      }
     } catch (error) {
       console.error('ML Search Error:', error.message);
       throw new Error(`ML Search Error: ${error.message}`);
@@ -115,11 +134,20 @@ class MLService {
    */
   async healthCheck() {
     try {
-      const response = await axios.get(
-        `${this.mlServiceUrl}/health`,
-        { timeout: 5000 }
-      );
-      return response.data;
+      if (this.useLocal) {
+        // For local development, use direct Flask API
+        const axios = (await import('axios')).default;
+        const response = await axios.get(`${this.localUrl}/health`, { timeout: 5000 });
+        return response.data;
+      } else {
+        // For HuggingFace Space, we can't directly check health, so assume it's healthy if we can connect
+        const app = await client(this.hfSpaceId);
+        return {
+          status: 'healthy',
+          service: 'phylo-ml-service',
+          mode: 'huggingface-space'
+        };
+      }
     } catch (error) {
       return {
         status: 'unhealthy',
@@ -128,138 +156,6 @@ class MLService {
     }
   }
 
-  /**
-   * Generate simple mock tree when HF Space is unavailable
-   * @private
-   */
-  generateEnhancedMockTree(texts, labels) {
-    const n = texts.length;
-    const useLabels = labels.length === n ? labels : texts.map((_, i) => `Text_${i + 1}`);
-
-    // Simple star topology as basic fallback
-    let newick = '';
-    if (n === 1) {
-      newick = `${useLabels[0]}:0.0;`;
-    } else if (n === 2) {
-      newick = `(${useLabels[0]}:0.5,${useLabels[1]}:0.5);`;
-    } else {
-      const branches = useLabels.map(label => `${label}:0.5`);
-      newick = `(${branches.join(',')});`;
-    }
-
-    // Basic clustering analysis for metadata
-    const clusteringResult = this.analyzeTextClustering(texts, useLabels);
-
-    return {
-      status: 'success',
-      newick,
-      wordcloud_data: clusteringResult.wordcloudData,
-      clustering_method: 'simple_fallback',
-      cluster_names: clusteringResult.clusterNames,
-      num_clusters: clusteringResult.clusterNames.length,
-      has_rich_labels: clusteringResult.hasCategories,
-      enhanced_labels: useLabels,
-      clean_labels: useLabels,
-      original_labels: labels,
-      num_texts: n,
-      num_labels: useLabels.length,
-      mock: true,
-      message: 'Using simple fallback (HF Space unavailable - proper phylogenetic reconstruction requires HF Space)'
-    };
-  }
-
-
-  /**
-   * Analyze text clustering for internal node labeling (secondary step)
-   * @private
-   */
-  analyzeTextClustering(texts, labels) {
-    // Detect if labels have category format
-    const hasCategories = labels.some(label => label.match(/^[A-Z_]+_\d+_/));
-
-    let clusterNames = [];
-    let wordcloudData = [];
-
-    if (hasCategories) {
-      // Extract categories from enhanced labels
-      const categoryMap = new Map();
-      labels.forEach((label, idx) => {
-        const match = label.match(/^([A-Z_]+)_\d+_/);
-        if (match) {
-          const category = match[1].replace(/_/g, ' ');
-          if (!categoryMap.has(category)) {
-            categoryMap.set(category, []);
-            clusterNames.push(category);
-          }
-          categoryMap.get(category).push(idx);
-        }
-      });
-
-      wordcloudData = Array.from(categoryMap.entries()).map(([category, indices]) => ({
-        categories: [category],
-        category_counts: { [category]: indices.length },
-        total_documents: indices.length
-      }));
-    } else {
-      // Auto-discover clusters based on content
-      const mockCategories = ['Technology', 'Politics', 'Sports', 'Science', 'Arts'];
-      const assignedCategories = texts.map((text) => {
-        const lowerText = text.toLowerCase();
-        if (lowerText.includes('ai') || lowerText.includes('technology') || lowerText.includes('digital')) return 'Technology';
-        if (lowerText.includes('government') || lowerText.includes('policy') || lowerText.includes('election')) return 'Politics';
-        if (lowerText.includes('team') || lowerText.includes('sport') || lowerText.includes('championship')) return 'Sports';
-        if (lowerText.includes('research') || lowerText.includes('discovery') || lowerText.includes('scientific')) return 'Science';
-        if (lowerText.includes('art') || lowerText.includes('music') || lowerText.includes('exhibition')) return 'Arts';
-        return mockCategories[Math.floor(Math.random() * mockCategories.length)];
-      });
-
-      clusterNames = [...new Set(assignedCategories)];
-
-      wordcloudData = {
-        categories: clusterNames,
-        category_counts: clusterNames.reduce((acc, cat) => {
-          acc[cat] = assignedCategories.filter(c => c === cat).length;
-          return acc;
-        }, {}),
-        total_documents: texts.length
-      };
-    }
-
-    return {
-      clusterNames,
-      wordcloudData,
-      hasCategories
-    };
-  }
-
-  /**
-   * Generate simple mock tree for fallback (legacy)
-   * @private
-   */
-  generateMockTree(texts, labels) {
-    const n = texts.length;
-    const useLabels = labels.length === n ? labels : texts.map((_, i) => `Text_${i + 1}`);
-
-    // Simple mock tree
-    let newick = '';
-    if (n === 1) {
-      newick = `${useLabels[0]}:0.0;`;
-    } else if (n === 2) {
-      newick = `(${useLabels[0]}:0.5,${useLabels[1]}:0.5);`;
-    } else {
-      const branches = useLabels.map(label => `${label}:0.5`);
-      newick = `(${branches.join(',')});`;
-    }
-
-    return {
-      status: 'success',
-      newick,
-      num_texts: n,
-      num_labels: useLabels.length,
-      mock: true,
-      message: 'Using simple mock data (ML service unavailable)'
-    };
-  }
 }
 
 export default new MLService();
