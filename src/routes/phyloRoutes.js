@@ -14,8 +14,9 @@ async function extractBasicLocationData(query, searchResults) {
   const geo_data = [];
 
   try {
-    // Common city/country patterns
+    // Enhanced city/country patterns with more global coverage
     const locationPatterns = [
+      // Major cities
       /\b(New York|NYC)\b/gi,
       /\b(Los Angeles|LA)\b/gi,
       /\b(Chicago)\b/gi,
@@ -25,11 +26,52 @@ async function extractBasicLocationData(query, searchResults) {
       /\b(Berlin)\b/gi,
       /\b(Washington|DC)\b/gi,
       /\b(Boston)\b/gi,
-      /\b(San Francisco)\b/gi
+      /\b(San Francisco)\b/gi,
+
+      // Countries and regions
+      /\b(Korea|Korean|North Korea|South Korea)\b/gi,
+      /\b(China|Chinese)\b/gi,
+      /\b(Japan|Japanese)\b/gi,
+      /\b(Germany|German)\b/gi,
+      /\b(France|French)\b/gi,
+      /\b(Russia|Russian)\b/gi,
+      /\b(Brazil|Brazilian)\b/gi,
+      /\b(India|Indian)\b/gi,
+      /\b(Mexico|Mexican)\b/gi,
+      /\b(Canada|Canadian)\b/gi,
+      /\b(Italy|Italian)\b/gi,
+      /\b(Spain|Spanish)\b/gi,
+      /\b(UK|United Kingdom|Britain|British)\b/gi,
+      /\b(USA|United States|America|American)\b/gi,
+      /\b(Australia|Australian)\b/gi,
+      /\b(Argentina|Argentinian)\b/gi,
+      /\b(Israel|Israeli)\b/gi,
+      /\b(Kenya|Kenyan)\b/gi,
+      /\b(Nigeria|Nigerian)\b/gi,
+      /\b(Egypt|Egyptian)\b/gi,
+      /\b(Turkey|Turkish)\b/gi,
+      /\b(Iran|Iranian)\b/gi,
+      /\b(Iraq|Iraqi)\b/gi,
+      /\b(Afghanistan|Afghan)\b/gi,
+      /\b(Pakistan|Pakistani)\b/gi,
+      /\b(Syria|Syrian)\b/gi,
+      /\b(Ukraine|Ukrainian)\b/gi,
+      /\b(Poland|Polish)\b/gi,
+
+      // Regional identifiers
+      /\b(Middle East|Middle Eastern)\b/gi,
+      /\b(Europe|European)\b/gi,
+      /\b(Asia|Asian)\b/gi,
+      /\b(Africa|African)\b/gi,
+      /\b(Latin America|Latin American)\b/gi,
+      /\b(Caribbean)\b/gi,
+      /\b(Balkans|Balkan)\b/gi,
+      /\b(Scandinavia|Scandinavian)\b/gi
     ];
 
     // Predefined coordinates for common locations
     const locationCoords = {
+      // Major cities
       'New York': { lat: 40.7127281, lon: -74.0060152, country: 'United States' },
       'NYC': { lat: 40.7127281, lon: -74.0060152, country: 'United States' },
       'Los Angeles': { lat: 34.0522265, lon: -118.2436596, country: 'United States' },
@@ -40,6 +82,48 @@ async function extractBasicLocationData(query, searchResults) {
       'Tokyo': { lat: 35.6828387, lon: 139.7594549, country: 'Japan' },
       'Berlin': { lat: 52.5170365, lon: 13.3888599, country: 'Germany' },
       'Washington': { lat: 38.8950368, lon: -77.0365427, country: 'United States' },
+
+      // Countries and regions - using capital cities as reference points
+      'Korea': { lat: 37.5665, lon: 126.9780, country: 'South Korea' },
+      'Korean': { lat: 37.5665, lon: 126.9780, country: 'South Korea' },
+      'North Korea': { lat: 39.0392, lon: 125.7625, country: 'North Korea' },
+      'South Korea': { lat: 37.5665, lon: 126.9780, country: 'South Korea' },
+      'China': { lat: 39.9042, lon: 116.4074, country: 'China' },
+      'Chinese': { lat: 39.9042, lon: 116.4074, country: 'China' },
+      'Japan': { lat: 35.6762, lon: 139.6503, country: 'Japan' },
+      'Japanese': { lat: 35.6762, lon: 139.6503, country: 'Japan' },
+      'Germany': { lat: 52.5200, lon: 13.4050, country: 'Germany' },
+      'German': { lat: 52.5200, lon: 13.4050, country: 'Germany' },
+      'France': { lat: 48.8566, lon: 2.3522, country: 'France' },
+      'French': { lat: 48.8566, lon: 2.3522, country: 'France' },
+      'Russia': { lat: 55.7558, lon: 37.6176, country: 'Russia' },
+      'Russian': { lat: 55.7558, lon: 37.6176, country: 'Russia' },
+      'Brazil': { lat: -15.8267, lon: -47.9218, country: 'Brazil' },
+      'Brazilian': { lat: -15.8267, lon: -47.9218, country: 'Brazil' },
+      'India': { lat: 28.6139, lon: 77.2090, country: 'India' },
+      'Indian': { lat: 28.6139, lon: 77.2090, country: 'India' },
+      'Mexico': { lat: 19.4326, lon: -99.1332, country: 'Mexico' },
+      'Mexican': { lat: 19.4326, lon: -99.1332, country: 'Mexico' },
+      'Canada': { lat: 45.4215, lon: -75.6972, country: 'Canada' },
+      'Canadian': { lat: 45.4215, lon: -75.6972, country: 'Canada' },
+      'Italy': { lat: 41.9028, lon: 12.4964, country: 'Italy' },
+      'Italian': { lat: 41.9028, lon: 12.4964, country: 'Italy' },
+      'Spain': { lat: 40.4168, lon: -3.7038, country: 'Spain' },
+      'Spanish': { lat: 40.4168, lon: -3.7038, country: 'Spain' },
+      'UK': { lat: 51.5074, lon: -0.1278, country: 'United Kingdom' },
+      'United Kingdom': { lat: 51.5074, lon: -0.1278, country: 'United Kingdom' },
+      'Britain': { lat: 51.5074, lon: -0.1278, country: 'United Kingdom' },
+      'British': { lat: 51.5074, lon: -0.1278, country: 'United Kingdom' },
+      'USA': { lat: 38.9072, lon: -77.0369, country: 'United States' },
+      'United States': { lat: 38.9072, lon: -77.0369, country: 'United States' },
+      'America': { lat: 38.9072, lon: -77.0369, country: 'United States' },
+      'American': { lat: 38.9072, lon: -77.0369, country: 'United States' },
+      'Australia': { lat: -35.2809, lon: 149.1300, country: 'Australia' },
+      'Australian': { lat: -35.2809, lon: 149.1300, country: 'Australia' },
+      'Israel': { lat: 31.7683, lon: 35.2137, country: 'Israel' },
+      'Israeli': { lat: 31.7683, lon: 35.2137, country: 'Israel' },
+      'Kenya': { lat: -1.2921, lon: 36.8219, country: 'Kenya' },
+      'Kenyan': { lat: -1.2921, lon: 36.8219, country: 'Kenya' },
       'DC': { lat: 38.8950368, lon: -77.0365427, country: 'United States' },
       'Boston': { lat: 42.3554334, lon: -71.060511, country: 'United States' },
       'San Francisco': { lat: 37.7790262, lon: -122.4199061, country: 'United States' }
