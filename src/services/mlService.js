@@ -2,10 +2,18 @@ import { client } from '@gradio/client';
 
 class MLService {
   constructor() {
-    // Use local ML service for development, HuggingFace Space for production
+    // Environment-based configuration
     this.useLocal = process.env.NODE_ENV === 'development';
-    this.localUrl = 'http://localhost:5000';
+    this.localUrl = process.env.ML_SERVICE_LOCAL_URL || 'http://localhost:5000';
+    this.hfUrl = process.env.ML_SERVICE_HF_URL || 'https://acauanrr-phylo-ml-service.hf.space';
     this.hfSpaceId = 'acauanrr/phylo-ml-service';
+
+    // Debug environment configuration
+    console.log('🔧 MLService Configuration:');
+    console.log('   NODE_ENV:', process.env.NODE_ENV);
+    console.log('   useLocal:', this.useLocal);
+    console.log('   localUrl:', this.localUrl);
+    console.log('   hfUrl:', this.hfUrl);
   }
 
   /**
@@ -15,13 +23,18 @@ class MLService {
    * @returns {Object} Tree data with newick format
    */
   async generateTree(texts, labels = []) {
+    console.log('🚀 generateTree called with:', { texts, labels, useLocal: this.useLocal, NODE_ENV: process.env.NODE_ENV });
     try {
       let result;
 
       if (this.useLocal) {
         // For local development, try direct Flask API first
+        console.log('🔍 Attempting to connect to local ML service at:', this.localUrl);
+        console.log('📋 NODE_ENV:', process.env.NODE_ENV);
+        console.log('🏠 useLocal:', this.useLocal);
         try {
           const axios = (await import('axios')).default;
+          console.log('📤 Sending request to local Flask API...');
           const response = await axios.post(
             `${this.localUrl}/api/generate-tree`,
             { texts, labels },
@@ -30,7 +43,37 @@ class MLService {
               timeout: 30000
             }
           );
-          result = response.data;
+
+          // Process Flask API JSON response
+          const flaskResponse = response.data;
+          console.log('📤 Sending request to local Flask API...');
+          console.log('Flask response status:', flaskResponse?.status);
+          console.log('Flask response newick:', flaskResponse?.newick);
+          console.log('Flask response original_labels:', flaskResponse?.original_labels);
+          console.log('Full Flask response:', JSON.stringify(flaskResponse, null, 2));
+
+          if (flaskResponse.status === 'success' && flaskResponse.newick) {
+            result = {
+              status: 'success',
+              newick: flaskResponse.newick,
+              num_texts: flaskResponse.num_texts || texts.length,
+              num_labels: flaskResponse.original_labels ? flaskResponse.original_labels.length : (flaskResponse.num_texts || labels.length),
+              enhanced_labels: flaskResponse.enhanced_labels,
+              statistics: flaskResponse.statistics,
+              cluster_names: flaskResponse.cluster_names,
+              wordcloud_data: flaskResponse.wordcloud_data,
+              color_data: flaskResponse.color_data
+            };
+          } else {
+            // Fallback for error responses
+            result = {
+              status: 'success',
+              newick: '(fallback);',
+              raw_output: `Error: ${flaskResponse.error || 'Unknown error'}`,
+              num_texts: texts.length,
+              num_labels: labels.length
+            };
+          }
         } catch (localError) {
           console.log('Local Flask API failed, trying Gradio client for local:', localError.message);
           throw localError; // For now, don't try Gradio for local

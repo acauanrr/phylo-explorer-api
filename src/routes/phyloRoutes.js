@@ -13,6 +13,7 @@ const router = express.Router();
 router.post('/generate-tree', async (req, res) => {
   try {
     const { texts, labels } = req.body;
+    console.log('🎯 Route handler received request:', { texts, labels });
 
     if (!texts || !Array.isArray(texts) || texts.length === 0) {
       return res.status(400).json({
@@ -22,7 +23,9 @@ router.post('/generate-tree', async (req, res) => {
     }
 
     // Call ML service
+    console.log('🎯 Calling mlService.generateTree...');
     const result = await mlService.generateTree(texts, labels);
+    console.log('🎯 ML service returned:', result);
 
     res.json({
       success: true,
@@ -39,7 +42,7 @@ router.post('/generate-tree', async (req, res) => {
 
 /**
  * POST /api/phylo/search
- * Search for node information using web search and optionally ML service
+ * Search for node information using web search and ML service with geolocation data
  */
 router.post('/search', async (req, res) => {
   try {
@@ -53,53 +56,72 @@ router.post('/search', async (req, res) => {
       });
     }
 
+    console.log('🔍 Search request for:', searchQuery, 'type:', node_type);
     let searchResults;
 
-    // Try to use HF Space Gradio endpoint for search
+    // Try to use ML service for search with geolocation data
     try {
-      const mlServiceUrl = process.env.ML_SERVICE_URL || 'https://acauanrr-phylo-ml-service.hf.space';
+      const mlServiceUrl = process.env.ML_SERVICE_LOCAL_URL || process.env.ML_SERVICE_URL || 'https://acauanrr-phylo-ml-service.hf.space';
+      console.log('📡 Calling ML service at:', mlServiceUrl);
+
       const mlResponse = await axios.post(
-        `${mlServiceUrl}/api/search_node`,  // Gradio endpoint
+        `${mlServiceUrl}/api/search-node`,  // Direct Flask API endpoint
         {
-          data: [searchQuery]  // Gradio format: array of inputs
+          node_name: searchQuery,
+          node_type: node_type || 'general'
         },
         {
           headers: { 'Content-Type': 'application/json' },
-          timeout: 15000 // 15 second timeout for web scraping
+          timeout: 30000 // 30 second timeout for web scraping and geocoding
         }
       );
 
-      if (mlResponse.data && mlResponse.data.data && mlResponse.data.data[0]) {
-        // Parse the JSON response from Gradio
-        const gradioResult = JSON.parse(mlResponse.data.data[0]);
-        if (gradioResult && gradioResult.status === 'success') {
-          // Convert Gradio result to expected format
-          searchResults = {
-            node_name: searchQuery,
-            title: gradioResult.title,
-            summary: gradioResult.summary,
-            image_url: gradioResult.image_url || null,
-            source_url: gradioResult.source_url,
-            publication_date: new Date().toISOString().split('T')[0],
-            wikipedia: gradioResult.wikipedia,
-            web_results: gradioResult.web_results || [],
-            enhanced_results: gradioResult.web_results || [],
-            locations: [],
-            geo_data: [],
-            category: 'General',
-            headline: gradioResult.title || searchQuery
-          };
-          console.log('Using HF Space Gradio search results');
-        }
+      console.log('📋 ML service response status:', mlResponse.status);
+      console.log('📋 ML service response data keys:', Object.keys(mlResponse.data || {}));
+
+      if (mlResponse.data && mlResponse.data.success && mlResponse.data.data) {
+        const mlResult = mlResponse.data.data;
+        console.log('📍 Locations found:', mlResult.locations?.length || 0);
+        console.log('🗺️ Geo data points:', mlResult.geo_data?.length || 0);
+
+        // Use ML service result with geolocation data
+        searchResults = {
+          node_name: searchQuery,
+          title: mlResult.title || searchQuery,
+          summary: mlResult.summary || '',
+          image_url: mlResult.image_url || null,
+          source_url: mlResult.source_url || '',
+          publication_date: new Date().toISOString().split('T')[0],
+          wikipedia: mlResult.wikipedia || {},
+          web_results: mlResult.web_results || [],
+          enhanced_results: mlResult.enhanced_results || mlResult.web_results || [],
+          // Include geolocation data from ML service
+          locations: mlResult.locations || [],
+          geo_data: mlResult.geo_data || [],
+          // Location metadata
+          has_location_data: mlResult.has_location_data || false,
+          total_locations: mlResult.total_locations || 0,
+          total_coordinates: mlResult.total_coordinates || 0,
+          category: mlResult.category || 'General',
+          headline: mlResult.headline || mlResult.title || searchQuery
+        };
+        console.log('✅ Using ML service search results with', searchResults.locations.length, 'locations');
       }
     } catch (mlError) {
-      console.log('HF Space search not available, using fallback web search:', mlError.message);
+      console.log('❌ ML service search failed, using fallback web search:', mlError.message);
     }
 
     // Fallback to local web search service if ML service didn't work
     if (!searchResults) {
       searchResults = await webSearchService.search(searchQuery);
-      console.log('Using local web search service');
+      console.log('📋 Using local web search service fallback');
+
+      // Ensure location fields exist even in fallback
+      searchResults.locations = searchResults.locations || [];
+      searchResults.geo_data = searchResults.geo_data || [];
+      searchResults.has_location_data = false;
+      searchResults.total_locations = 0;
+      searchResults.total_coordinates = 0;
     }
 
     // Add node type if provided
@@ -107,10 +129,21 @@ router.post('/search', async (req, res) => {
       searchResults.node_type = node_type;
     }
 
+    // Add location summary for frontend
+    searchResults.location_summary = {
+      has_locations: searchResults.has_location_data || searchResults.locations.length > 0,
+      location_count: searchResults.total_locations || searchResults.locations.length,
+      coordinate_count: searchResults.total_coordinates || searchResults.geo_data.length,
+      sample_locations: searchResults.locations.slice(0, 3) // First 3 for preview
+    };
+
+    console.log('🎯 Final response - locations:', searchResults.location_summary.location_count, 'coordinates:', searchResults.location_summary.coordinate_count);
+
     res.json({
       success: true,
       data: searchResults,
-      query: searchQuery
+      query: searchQuery,
+      geolocation_enabled: true
     });
   } catch (error) {
     console.error('Search error:', error);
